@@ -9,6 +9,7 @@ import com.wealthops.portfolio.entity.Portfolio;
 import com.wealthops.portfolio.repository.HoldingRepository;
 import com.wealthops.portfolio.repository.PortfolioRepository;
 import com.wealthops.portfolio.service.PortfolioService;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -27,6 +28,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PortfolioResponse getPortfolioByClientId(Long clientId) {
         Portfolio portfolio = portfolioRepository.findByClientId(clientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Portfolio not found for client id: " + clientId));
@@ -34,6 +36,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PortfolioResponse getPortfolioById(Long portfolioId) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Portfolio not found with id: " + portfolioId));
@@ -41,6 +44,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     }
 
     @Override
+    @Transactional
     public HoldingResponse addHolding(Long portfolioId, HoldingRequest request) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Portfolio not found with id: " + portfolioId));
@@ -59,6 +63,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     }
 
     @Override
+    @Transactional
     public HoldingResponse updateHolding(Long portfolioId, Long holdingId, HoldingRequest request) {
         Holding holding = holdingRepository.findById(holdingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Holding not found with id: " + holdingId));
@@ -79,6 +84,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     }
 
     @Override
+    @Transactional
     public void deleteHolding(Long portfolioId, Long holdingId) {
         Holding holding = holdingRepository.findById(holdingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Holding not found with id: " + holdingId));

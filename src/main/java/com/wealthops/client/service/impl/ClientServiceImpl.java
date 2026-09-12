@@ -13,6 +13,7 @@ import com.wealthops.client.service.ClientService;
 import com.wealthops.exception.ResourceNotFoundException;
 import com.wealthops.registration.entity.Role;
 import com.wealthops.registration.entity.User;
+import org.springframework.transaction.annotation.Transactional;
 import com.wealthops.registration.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
@@ -39,6 +40,7 @@ public class ClientServiceImpl implements ClientService {
     }
 
     @Override
+    @Transactional
     public ClientResponse createClient(ClientRequest request) {
         Branch branch = branchRepository.findById(request.getBranchId())
                 .orElseThrow(() -> new ResourceNotFoundException("Branch not found with id: " + request.getBranchId()));
@@ -72,6 +74,7 @@ public class ClientServiceImpl implements ClientService {
 
 
     @Override
+    @Transactional(readOnly = true)
     public ClientResponse getClientById(Long id) {
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found with id: " + id));
@@ -79,6 +82,7 @@ public class ClientServiceImpl implements ClientService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ClientResponse> getAllClients() {
         return clientRepository.findAll()
                 .stream()
@@ -87,6 +91,7 @@ public class ClientServiceImpl implements ClientService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ClientResponse> getClientsByBranch(Long branchId) {
         return clientRepository.findByBranchId(branchId)
                 .stream()
@@ -95,6 +100,7 @@ public class ClientServiceImpl implements ClientService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<ClientResponse> getClientsByRm(Long rmId) {
         return clientRepository.findByAssignedRmId(rmId)
                 .stream()
@@ -103,6 +109,7 @@ public class ClientServiceImpl implements ClientService {
     }
 
     @Override
+    @Transactional
     public ClientResponse updateClient(Long id, ClientRequest request) {
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found with id: " + id));
@@ -131,6 +138,7 @@ public class ClientServiceImpl implements ClientService {
     }
 
     @Override
+    @Transactional
     public void deleteClient(Long id) {
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found with id: " + id));
