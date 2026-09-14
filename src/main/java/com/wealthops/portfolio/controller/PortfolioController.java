@@ -20,13 +20,13 @@ public class PortfolioController {
         this.portfolioService = portfolioService;
     }
 
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER','RELATIONSHIP_MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER','RELATIONSHIP_MANAGER','CLIENT')")
     @GetMapping("/{portfolioId}")
     public ResponseEntity<PortfolioResponse> getPortfolio(@PathVariable Long portfolioId) {
         return ResponseEntity.ok(portfolioService.getPortfolioById(portfolioId));
     }
 
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER','RELATIONSHIP_MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER','RELATIONSHIP_MANAGER','CLIENT')")
     @GetMapping("/client/{clientId}")
     public ResponseEntity<PortfolioResponse> getPortfolioByClient(@PathVariable Long clientId) {
         return ResponseEntity.ok(portfolioService.getPortfolioByClientId(clientId));

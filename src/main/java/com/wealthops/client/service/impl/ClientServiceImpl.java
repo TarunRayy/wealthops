@@ -1,6 +1,7 @@
 package com.wealthops.client.service.impl;
 
 import com.wealthops.branch.entity.Branch;
+import com.wealthops.security.CurrentUserService;
 import com.wealthops.branch.repository.BranchRepository;
 import com.wealthops.client.dto.ClientRequest;
 import com.wealthops.client.dto.ClientResponse;
@@ -28,15 +29,18 @@ public class ClientServiceImpl implements ClientService {
     private final BranchRepository branchRepository;
     private final UserRepository userRepository;
     private final PortfolioRepository portfolioRepository;
+    private final CurrentUserService currentUserService;
 
     public ClientServiceImpl(ClientRepository clientRepository,
                              BranchRepository branchRepository,
                              UserRepository userRepository,
-                             PortfolioRepository portfolioRepository) {
+                             PortfolioRepository portfolioRepository,
+                             CurrentUserService currentUserService) {
         this.clientRepository = clientRepository;
         this.branchRepository = branchRepository;
         this.userRepository = userRepository;
         this.portfolioRepository = portfolioRepository;
+        this.currentUserService = currentUserService;
     }
 
     @Override
@@ -78,14 +82,35 @@ public class ClientServiceImpl implements ClientService {
     public ClientResponse getClientById(Long id) {
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found with id: " + id));
+        assertInScope(client);
+        return toResponse(client);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ClientResponse getClientByEmail(String email) {
+        Client client = clientRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Client not found with email: " + email));
         return toResponse(client);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ClientResponse> getAllClients() {
-        return clientRepository.findAll()
-                .stream()
+        Role role = currentUserService.getCurrentUserRole();
+        List<Client> clients;
+
+        if (currentUserService.isAdminOrCompliance()) {
+            clients = clientRepository.findAll();
+        } else if (role == Role.BRANCH_MANAGER) {
+            clients = clientRepository.findByBranchId(currentUserService.getCurrentUserBranchId());
+        } else if (role == Role.RELATIONSHIP_MANAGER) {
+            clients = clientRepository.findByAssignedRmId(currentUserService.getCurrentUserId());
+        } else {
+            clients = List.of();
+        }
+
+        return clients.stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -93,6 +118,11 @@ public class ClientServiceImpl implements ClientService {
     @Override
     @Transactional(readOnly = true)
     public List<ClientResponse> getClientsByBranch(Long branchId) {
+        Role role = currentUserService.getCurrentUserRole();
+        if (role == Role.BRANCH_MANAGER
+                && !branchId.equals(currentUserService.getCurrentUserBranchId())) {
+            throw new ResourceNotFoundException("Branch not found with id: " + branchId);
+        }
         return clientRepository.findByBranchId(branchId)
                 .stream()
                 .map(this::toResponse)
@@ -102,6 +132,11 @@ public class ClientServiceImpl implements ClientService {
     @Override
     @Transactional(readOnly = true)
     public List<ClientResponse> getClientsByRm(Long rmId) {
+        Role role = currentUserService.getCurrentUserRole();
+        if (role == Role.RELATIONSHIP_MANAGER
+                && !rmId.equals(currentUserService.getCurrentUserId())) {
+            throw new ResourceNotFoundException("RM not found with id: " + rmId);
+        }
         return clientRepository.findByAssignedRmId(rmId)
                 .stream()
                 .map(this::toResponse)
@@ -113,6 +148,7 @@ public class ClientServiceImpl implements ClientService {
     public ClientResponse updateClient(Long id, ClientRequest request) {
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found with id: " + id));
+        assertInScope(client);
 
         Branch branch = branchRepository.findById(request.getBranchId())
                 .orElseThrow(() -> new ResourceNotFoundException("Branch not found with id: " + request.getBranchId()));
@@ -142,6 +178,7 @@ public class ClientServiceImpl implements ClientService {
     public void deleteClient(Long id) {
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found with id: " + id));
+        assertInScope(client);
         clientRepository.delete(client);
     }
 
@@ -161,5 +198,21 @@ public class ClientServiceImpl implements ClientService {
                 client.getAssignedRm().getFullName(),
                 client.getCreatedAt()
         );
+    }
+    private void assertInScope(Client client) {
+        Role role = currentUserService.getCurrentUserRole();
+
+        if (currentUserService.isAdminOrCompliance()) {
+            return;
+        }
+        if (role == Role.BRANCH_MANAGER
+                && client.getBranch().getId().equals(currentUserService.getCurrentUserBranchId())) {
+            return;
+        }
+        if (role == Role.RELATIONSHIP_MANAGER
+                && client.getAssignedRm().getId().equals(currentUserService.getCurrentUserId())) {
+            return;
+        }
+        throw new ResourceNotFoundException("Client not found with id: " + client.getId());
     }
 }

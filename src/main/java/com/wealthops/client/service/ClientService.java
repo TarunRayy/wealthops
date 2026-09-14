@@ -8,6 +8,7 @@ import java.util.List;
 public interface ClientService {
     ClientResponse createClient(ClientRequest request);
     ClientResponse getClientById(Long id);
+    ClientResponse getClientByEmail(String email);
     List<ClientResponse> getAllClients();
     List<ClientResponse> getClientsByBranch(Long branchId);
     List<ClientResponse> getClientsByRm(Long rmId);

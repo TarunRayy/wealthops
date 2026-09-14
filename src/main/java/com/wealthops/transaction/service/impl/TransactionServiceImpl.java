@@ -1,6 +1,8 @@
 package com.wealthops.transaction.service.impl;
 
 import com.wealthops.client.entity.Client;
+import com.wealthops.audit.entity.AuditAction;
+import com.wealthops.audit.service.AuditLogService;
 import com.wealthops.client.repository.ClientRepository;
 import com.wealthops.exception.ResourceNotFoundException;
 import com.wealthops.portfolio.entity.Holding;
@@ -35,17 +37,19 @@ public class TransactionServiceImpl implements TransactionService {
     private final PortfolioRepository portfolioRepository;
     private final HoldingRepository holdingRepository;
     private final UserRepository userRepository;
-
+    private final AuditLogService auditLogService;
     public TransactionServiceImpl(TransactionRepository transactionRepository,
                                   ClientRepository clientRepository,
                                   PortfolioRepository portfolioRepository,
                                   HoldingRepository holdingRepository,
-                                  UserRepository userRepository) {
+                                  UserRepository userRepository,
+                                  AuditLogService auditLogService) {
         this.transactionRepository = transactionRepository;
         this.clientRepository = clientRepository;
         this.portfolioRepository = portfolioRepository;
         this.holdingRepository = holdingRepository;
         this.userRepository = userRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Override
@@ -85,8 +89,13 @@ public class TransactionServiceImpl implements TransactionService {
         txn.setUnits(dto.getUnits());
         txn.setStatus(TransactionStatus.PENDING);
         txn.setRequestedBy(requester);
+        Transaction saved = transactionRepository.save(txn);
 
-        return toDto(transactionRepository.save(txn));
+        auditLogService.log(requester.getEmail(), requester.getRole().name(),
+                AuditAction.TRANSACTION_CREATED, "Transaction", saved.getId(),
+                null, "Type: " + saved.getType() + ", Amount: " + saved.getAmount());
+
+        return toDto(saved);
     }
 
     private void validateRequesterOwnsClient(User requester, Client client) {
@@ -120,7 +129,13 @@ public class TransactionServiceImpl implements TransactionService {
         txn.setApprovedBy(approver);
         txn.setRemarks(dto.getRemarks());
 
-        return toDto(transactionRepository.save(txn));
+        Transaction saved = transactionRepository.save(txn);
+
+        auditLogService.log(approver.getEmail(), approver.getRole().name(),
+                AuditAction.TRANSACTION_APPROVED, "Transaction", saved.getId(),
+                "PENDING", "APPROVED");
+
+        return toDto(saved);
     }
 
     @Override
@@ -136,7 +151,12 @@ public class TransactionServiceImpl implements TransactionService {
         txn.setApprovedBy(approver);
         txn.setRemarks(dto.getRemarks());
 
-        return toDto(transactionRepository.save(txn));
+        Transaction saved = transactionRepository.save(txn);
+        auditLogService.log(approver.getEmail(), approver.getRole().name(),
+                AuditAction.TRANSACTION_REJECTED, "Transaction", saved.getId(),
+                "PENDING", "REJECTED");
+
+        return toDto(saved);
     }
 
     private Transaction getPendingOrThrow(Long id) {

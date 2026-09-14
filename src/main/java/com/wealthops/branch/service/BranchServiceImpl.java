@@ -3,6 +3,8 @@ package com.wealthops.branch.service;
 import com.wealthops.branch.dto.BranchRequest;
 import com.wealthops.branch.dto.BranchResponse;
 import com.wealthops.branch.entity.Branch;
+import com.wealthops.registration.entity.Role;
+import com.wealthops.security.CurrentUserService;
 import com.wealthops.branch.repository.BranchRepository;
 import com.wealthops.exception.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
@@ -14,9 +16,11 @@ import java.util.stream.Collectors;
 public class BranchServiceImpl implements BranchService {
 
     private final BranchRepository branchRepository;
+    private final CurrentUserService currentUserService;
 
-    public BranchServiceImpl(BranchRepository branchRepository) {
+    public BranchServiceImpl(BranchRepository branchRepository, CurrentUserService currentUserService) {
         this.branchRepository = branchRepository;
+        this.currentUserService = currentUserService;
     }
 
     @Override
@@ -32,11 +36,28 @@ public class BranchServiceImpl implements BranchService {
     public BranchResponse getBranchById(Long id) {
         Branch branch = branchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Branch not found with id: " + id));
+
+        Role role = currentUserService.getCurrentUserRole();
+        if ((role == Role.BRANCH_MANAGER || role == Role.RELATIONSHIP_MANAGER)
+                && !id.equals(currentUserService.getCurrentUserBranchId())) {
+            throw new ResourceNotFoundException("Branch not found with id: " + id);
+        }
+
         return toResponse(branch);
     }
 
     @Override
     public List<BranchResponse> getAllBranches() {
+        Role role = currentUserService.getCurrentUserRole();
+
+        if (role == Role.BRANCH_MANAGER || role == Role.RELATIONSHIP_MANAGER) {
+            Long branchId = currentUserService.getCurrentUserBranchId();
+            return branchRepository.findById(branchId)
+                    .map(this::toResponse)
+                    .map(List::of)
+                    .orElse(List.of());
+        }
+
         return branchRepository.findAll()
                 .stream()
                 .map(this::toResponse)

@@ -1,6 +1,10 @@
 package com.wealthops.registration.service.impl;
 
 import com.wealthops.branch.entity.Branch;
+import com.wealthops.audit.entity.AuditAction;
+import com.wealthops.audit.service.AuditLogService;
+import com.wealthops.exception.ResourceNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
 import com.wealthops.branch.repository.BranchRepository;
 import com.wealthops.exception.BranchNotFoundException;
 import com.wealthops.exception.DuplicateEmailException;
@@ -17,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class RegistrationServiceImpl implements RegistrationService {
@@ -31,13 +37,16 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final UserRepository userRepository;
     private final BranchRepository branchRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogService auditLogService;
 
     public RegistrationServiceImpl(UserRepository userRepository,
                                    BranchRepository branchRepository,
-                                   PasswordEncoder passwordEncoder) {
+                                   PasswordEncoder passwordEncoder,
+                                   AuditLogService auditLogService) {
         this.userRepository = userRepository;
         this.branchRepository = branchRepository;
         this.passwordEncoder = passwordEncoder;
+        this.auditLogService = auditLogService;
     }
 
     @Override
@@ -58,14 +67,26 @@ public class RegistrationServiceImpl implements RegistrationService {
 
     @Override
     @Transactional
-    public RegisterResponse registerStaff(RegisterStaffRequest request) {
+    public RegisterResponse registerStaff(RegisterStaffRequest request, String requesterEmail) {
         assertEmailAvailable(request.getEmail());
+
+
+        User requester = userRepository.findByEmail(requesterEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Requester not found"));
 
         Role role = request.getRole();
         if (!ASSIGNABLE_STAFF_ROLES.contains(role)) {
             throw new InvalidRoleAssignmentException(
                     "Role '" + role + "' cannot be created via staff registration. " +
                             "Allowed roles: " + ASSIGNABLE_STAFF_ROLES);
+        }
+
+        if (requester.getRole() == Role.BRANCH_MANAGER) {
+            if (requester.getBranch() == null
+                    || request.getBranchId() == null
+                    || !requester.getBranch().getId().equals(request.getBranchId())) {
+                throw new AccessDeniedException("You can only create staff within your own branch");
+            }
         }
 
         Branch branch = null;
@@ -90,7 +111,59 @@ public class RegistrationServiceImpl implements RegistrationService {
         user.setBranch(branch);
 
         User saved = userRepository.save(user);
+
+        auditLogService.log(requester.getEmail(), requester.getRole().name(),
+                AuditAction.STAFF_REGISTERED, "User", saved.getId(),
+                null, "Registered " + saved.getRole() + ": " + saved.getEmail());
+
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RegisterResponse> getAllStaff(String requesterEmail) {
+        User requester = userRepository.findByEmail(requesterEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Requester not found"));
+
+        List<User> staff = requester.getRole() == Role.BRANCH_MANAGER
+                ? userRepository.findByBranchIdAndRoleIn(requester.getBranch().getId(), ASSIGNABLE_STAFF_ROLES)
+                : userRepository.findByRoleIn(ASSIGNABLE_STAFF_ROLES);
+
+        return staff.stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RegisterResponse> getStaffByBranch(Long branchId, String requesterEmail) {
+        User requester = userRepository.findByEmail(requesterEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Requester not found"));
+
+        if (requester.getRole() == Role.BRANCH_MANAGER
+                && (requester.getBranch() == null || !requester.getBranch().getId().equals(branchId))) {
+            throw new ResourceNotFoundException("Branch not found with id: " + branchId);
+        }
+
+        return userRepository.findByBranchIdAndRoleIn(branchId, ASSIGNABLE_STAFF_ROLES)
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RegisterResponse> getRelationshipManagers(String requesterEmail) {
+        User requester = userRepository.findByEmail(requesterEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Requester not found"));
+
+        List<User> rms = requester.getRole() == Role.BRANCH_MANAGER
+                ? userRepository.findByBranchIdAndRoleIn(requester.getBranch().getId(), Set.of(Role.RELATIONSHIP_MANAGER))
+                : userRepository.findByRole(Role.RELATIONSHIP_MANAGER);
+
+        return rms.stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     private void assertEmailAvailable(String email) {
