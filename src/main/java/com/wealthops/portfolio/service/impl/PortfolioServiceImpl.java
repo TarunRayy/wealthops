@@ -5,6 +5,9 @@ import com.wealthops.portfolio.dto.HoldingRequest;
 import com.wealthops.portfolio.dto.HoldingResponse;
 import com.wealthops.portfolio.dto.PortfolioResponse;
 import com.wealthops.portfolio.entity.Holding;
+import com.wealthops.client.entity.Client;
+import com.wealthops.registration.entity.Role;
+import com.wealthops.security.CurrentUserService;
 import com.wealthops.portfolio.entity.Portfolio;
 import com.wealthops.portfolio.repository.HoldingRepository;
 import com.wealthops.portfolio.repository.PortfolioRepository;
@@ -21,10 +24,12 @@ public class PortfolioServiceImpl implements PortfolioService {
 
     private final PortfolioRepository portfolioRepository;
     private final HoldingRepository holdingRepository;
+    private final CurrentUserService currentUserService;
 
-    public PortfolioServiceImpl(PortfolioRepository portfolioRepository, HoldingRepository holdingRepository) {
+    public PortfolioServiceImpl(PortfolioRepository portfolioRepository, HoldingRepository holdingRepository, CurrentUserService currentUserService) {
         this.portfolioRepository = portfolioRepository;
         this.holdingRepository = holdingRepository;
+        this.currentUserService = currentUserService;
     }
 
     @Override
@@ -32,6 +37,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     public PortfolioResponse getPortfolioByClientId(Long clientId) {
         Portfolio portfolio = portfolioRepository.findByClientId(clientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Portfolio not found for client id: " + clientId));
+        assertInScope(portfolio);
         return toResponse(portfolio);
     }
 
@@ -40,6 +46,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     public PortfolioResponse getPortfolioById(Long portfolioId) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Portfolio not found with id: " + portfolioId));
+        assertInScope(portfolio);
         return toResponse(portfolio);
     }
 
@@ -48,6 +55,7 @@ public class PortfolioServiceImpl implements PortfolioService {
     public HoldingResponse addHolding(Long portfolioId, HoldingRequest request) {
         Portfolio portfolio = portfolioRepository.findById(portfolioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Portfolio not found with id: " + portfolioId));
+        assertInScope(portfolio);
 
         Holding holding = new Holding();
         holding.setPortfolio(portfolio);
@@ -71,6 +79,7 @@ public class PortfolioServiceImpl implements PortfolioService {
         if (!holding.getPortfolio().getId().equals(portfolioId)) {
             throw new ResourceNotFoundException("Holding " + holdingId + " does not belong to portfolio " + portfolioId);
         }
+        assertInScope(holding.getPortfolio());
 
         holding.setFundName(request.getFundName());
         holding.setFolioNumber(request.getFolioNumber());
@@ -93,6 +102,7 @@ public class PortfolioServiceImpl implements PortfolioService {
             throw new ResourceNotFoundException("Holding " + holdingId + " does not belong to portfolio " + portfolioId);
         }
 
+        assertInScope(holding.getPortfolio());
         holdingRepository.delete(holding);
     }
 
@@ -132,5 +142,23 @@ public class PortfolioServiceImpl implements PortfolioService {
                 holding.getCurrentValue(),
                 holding.getPurchaseDate()
         );
+    }
+    private void assertInScope(Portfolio portfolio) {
+        Role role = currentUserService.getCurrentUserRole();
+        Client client = portfolio.getClient();
+
+        if (currentUserService.isAdminOrCompliance()) {
+            return;
+        }
+        if (role == Role.BRANCH_MANAGER
+                && client.getBranch().getId().equals(currentUserService.getCurrentUserBranchId())) {
+            return;
+        }
+        if (role == Role.RELATIONSHIP_MANAGER
+                && client.getAssignedRm().getId().equals(currentUserService.getCurrentUserId())) {
+            return;
+        }
+        // CLIENT role uses a separate /portfolio/me-style endpoint, not this one
+        throw new ResourceNotFoundException("Portfolio not found with id: " + portfolio.getId());
     }
 }

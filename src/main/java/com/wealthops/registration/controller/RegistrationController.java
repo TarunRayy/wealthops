@@ -1,6 +1,7 @@
 package com.wealthops.registration.controller;
 
 import com.wealthops.registration.dto.RegisterClientRequest;
+import org.springframework.security.core.Authentication;
 import com.wealthops.registration.dto.RegisterResponse;
 import com.wealthops.registration.dto.RegisterStaffRequest;
 import com.wealthops.registration.service.RegistrationService;
@@ -36,17 +37,28 @@ public class RegistrationController {
      * token) or one authenticated as anything other than SUPER_ADMIN /
      * BRANCH_MANAGER gets a 403 via RestAccessDeniedHandler before this
      * method body ever runs.
-     *
-     * TODO (Phase 5 - scope-based access): a Branch Manager should only
-     * be able to create staff within their OWN branch. That's a
-     * data-level check this annotation can't express — it belongs in
-     * the service layer, comparing the caller's branchId (from the JWT)
-     * against request.getBranchId().
      */
     @PostMapping("/staff")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER')")
-    public ResponseEntity<RegisterResponse> registerStaff(@Valid @RequestBody RegisterStaffRequest request) {
-        RegisterResponse response = registrationService.registerStaff(request);
+    public ResponseEntity<RegisterResponse> registerStaff(@Valid @RequestBody RegisterStaffRequest request,
+                                                          Authentication authentication) {
+        RegisterResponse response = registrationService.registerStaff(request, authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/staff")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER')")
+    public ResponseEntity<java.util.List<RegisterResponse>> getStaff(@RequestParam(required = false) Long branchId,
+                                                                     Authentication authentication) {
+        if (branchId != null) {
+            return ResponseEntity.ok(registrationService.getStaffByBranch(branchId, authentication.getName()));
+        }
+        return ResponseEntity.ok(registrationService.getAllStaff(authentication.getName()));
+    }
+
+    @GetMapping("/rms")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER')")
+    public ResponseEntity<java.util.List<RegisterResponse>> getRelationshipManagers(Authentication authentication) {
+        return ResponseEntity.ok(registrationService.getRelationshipManagers(authentication.getName()));
     }
 }

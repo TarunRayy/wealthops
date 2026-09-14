@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,13 +22,19 @@ public class ClientController {
         this.clientService = clientService;
     }
 
+    @PreAuthorize("hasRole('CLIENT')")
+    @GetMapping("/me")
+    public ResponseEntity<ClientResponse> getMyProfile(Authentication authentication) {
+        return ResponseEntity.ok(clientService.getClientByEmail(authentication.getName()));
+    }
+
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER')")
     @PostMapping
     public ResponseEntity<ClientResponse> createClient(@Valid @RequestBody ClientRequest request) {
         return new ResponseEntity<>(clientService.createClient(request), HttpStatus.CREATED);
     }
 
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER','RELATIONSHIP_MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_MANAGER','RELATIONSHIP_MANAGER','CLIENT')")
     @GetMapping("/{id}")
     public ResponseEntity<ClientResponse> getClient(@PathVariable Long id) {
         return ResponseEntity.ok(clientService.getClientById(id));
